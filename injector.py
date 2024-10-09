@@ -137,7 +137,7 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("You have already confirmed the payment and received the link for this package.")
         return CHOOSING_TYPE
     else:
-        await update.message.reply_text("The message you provided does not appear to be a valid M-Pesa confirmation. Please try again:")
+        await update.message.reply_text("The message you provided does not appear to be a valid M-Pesa confirmation. Please try again:for help click here @emmkash")
         return ENTERING_MPESA_CONFIRMATION
 
 async def initiate_stk_push(phone_number: str, amount: int, update: Update):
@@ -162,7 +162,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ends the conversation."""
-    await update.message.reply_text("Thank you for using Bingwa Sokoni! If you have more inquiries, please contact support.")
+    await update.message.reply_text("Thank you for using Bingwa Sokoni! If you have more inquiries, please contact support @emmkash.")
     return ConversationHandler.END
 
 def main():
