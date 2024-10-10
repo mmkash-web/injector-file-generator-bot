@@ -162,7 +162,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ends the conversation."""
-    await update.message.reply_text("Thank you for using Bingwa Sokoni! If you have more inquiries, please contact support @emmkash.")
+    await update.message.reply_text("Thank you for using EMMKASH-TECH files Generator Bot! If you have more inquiries, please contact support @emmkash.")
     return ConversationHandler.END
 
 def main():
