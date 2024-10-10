@@ -95,7 +95,7 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
     if user_id not in user_sent_links:
         user_sent_links[user_id] = {"HTTP_10_DAYS": False, "HTTP_14_DAYS": False}
 
-    if "Confirmed" in mpesa_confirmation_message and not user_sent_links[user_id][selected_package]:
+    if "DUKE EMMANUEL KIRERA-7." in mpesa_confirmation_message and not user_sent_links[user_id][selected_package]:
         # Mark the message as used and store the confirmation for the user
         used_confirmation_messages.add(mpesa_confirmation_message)
         user_sent_links[user_id][selected_package] = True
