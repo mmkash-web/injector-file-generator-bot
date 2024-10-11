@@ -172,7 +172,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://callback1-21e1c9a49f0a.ngrok.io/callback"
+        "callback_url": "https://callback1-21e1c9a49f0d.ngrok.io/callback"
     }
 
     # Base64 encode the credentials
@@ -181,41 +181,60 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
     headers = {
         "Authorization": f"Basic {encoded_credentials}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
 
-    response = requests.post(PAYHERO_API_URL, json=payload, headers=headers)
-
-    if response.status_code == 200:
-        response_json = response.json()
-        transaction_id = response_json['data']['transaction_id']
-        await update.message.reply_text("STK Push initiated successfully. Please check your M-Pesa app.")
-        return transaction_id
-    else:
-        await update.message.reply_text("Failed to initiate STK Push. Please try again later.")
+    try:
+        response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an error for bad responses
+        logger.info("STK Push initiated successfully.")
+        return response.json().get("transaction_id")  # Return the transaction ID
+    except requests.RequestException as e:
+        logger.error(f"Error initiating STK Push: {e}")
+        await update.message.reply_text("Failed to initiate payment. Please try again later.")
         return None
 
 async def check_payment_status(transaction_id: str):
-    """Check the payment status via PayHero API."""
-    # You should implement the logic to check the payment status from the PayHero API
-    # Here, we simulate the response for example purposes
-    return "successful", "your_phone_number"  # Example response
+    """Check payment status from PayHero API."""
+    url = f"{PAYHERO_API_URL}/{transaction_id}"
+    credentials = f"{API_USERNAME}:{API_PASSWORD}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    headers = {
+        "Authorization": f"Basic {encoded_credentials}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        payment_data = response.json()
+        return payment_data.get("status"), payment_data.get("phone_number")  # Return status and phone number
+    except requests.RequestException as e:
+        logger.error(f"Error checking payment status: {e}")
+        return None, None
 
 async def verify_transaction_with_flask(transaction_id: str, confirmation_message: str):
-    """Verify transaction details with the Flask app."""
-    # Send a request to the Flask app to verify the transaction
-    response = requests.get(f"{FLASK_APP_URL}/verify_transaction", params={"transaction_id": transaction_id, "confirmation_message": confirmation_message})
-    
-    if response.status_code == 200:
-        return response.json().get("match", False)
-    return False
+    """Verify the transaction with the Flask app."""
+    try:
+        response = requests.get(f"{FLASK_APP_URL}/verify_transaction/{transaction_id}/{confirmation_message}")
+        return response.json().get("verified", False)  # Return whether the transaction is verified
+    except requests.RequestException as e:
+        logger.error(f"Error verifying transaction with Flask: {e}")
+        return False
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Check if the confirmation message is in a valid format."""
-    return "M-PESA Confirmation" in message  # Modify this to match your confirmation message format
+    """Validate the M-Pesa confirmation message format."""
+    # Example of a basic check: ensure the message contains certain keywords
+    return "DUKE EMMANUEL KIRERA" in message  # Update with your specific criteria
 
-async def main():
-    """Start the bot."""
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancels the conversation."""
+    await update.message.reply_text("Canceled the process.")
+    return ConversationHandler.END
+
+def main():
+    """Run the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Set up conversation handler
@@ -226,12 +245,16 @@ async def main():
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler('start', start)],
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     application.add_handler(conv_handler)
 
-    await application.run_polling()
+    # Run the bot
+    try:
+        application.run_polling()
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
 
 if __name__ == '__main__':
     import asyncio
