@@ -18,7 +18,7 @@ BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
 API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
 API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
-FLASK_APP_URL = "https://callback1-21e1c9a49f0d.herokuapp.com/" # Add your Flask app URL here
+FLASK_APP_URL = "https://callback1-21e1c9a49f0d.herokuapp.com/"  # Add your Flask app URL here
 
 # Load file links from JSON
 def load_links():
@@ -47,7 +47,7 @@ used_confirmation_messages = set()
 CHOOSING_TYPE, ENTERING_PHONE, ENTERING_MPESA_CONFIRMATION = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Starts the bot and sends the welcome message"""
+    """Starts the bot and sends the welcome message."""
     keyboard = [
         [InlineKeyboardButton("HTTP Injector 10 Days - 80KES", callback_data="HTTP_10_DAYS")],
         [InlineKeyboardButton("HTTP Injector 14 Days - 100KES", callback_data="HTTP_14_DAYS")],
@@ -57,7 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CHOOSING_TYPE
 
 async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the file type choice and asks for the phone number"""
+    """Handles the file type choice and asks for the phone number."""
     query = update.callback_query
     await query.answer()
 
@@ -67,7 +67,7 @@ async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     return ENTERING_PHONE
 
 async def enter_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles phone number input and proceeds with the payment"""
+    """Handles phone number input and proceeds with the payment."""
     phone_number = update.message.text
     context.user_data["phone_number"] = phone_number
 
@@ -107,53 +107,13 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
     # Check payment status from PayHero
     payment_status, payment_phone_number = await check_payment_status(transaction_id)
 
-    # Check against the transaction_id from Flask app
+    # Verify transaction with Flask app
     if await verify_transaction_with_flask(transaction_id, mpesa_confirmation_message):
         if payment_status == "successful":
             if payment_phone_number == user_phone_number:
-                if "DUKE EMMANUEL KIRERA-7." in mpesa_confirmation_message and not user_sent_links[user_id][selected_package]:
-                    # Mark the message as used and store the confirmation for the user
-                    used_confirmation_messages.add(mpesa_confirmation_message)
-                    user_sent_links[user_id][selected_package] = True
-
-                    # Get the current link index for the selected package
-                    if selected_package == "HTTP_10_DAYS":
-                        link = FILE_LINKS_10_DAYS[current_link_index[selected_package]]
-                        current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_10_DAYS)
-                    else:
-                        link = FILE_LINKS_14_DAYS[current_link_index[selected_package]]
-                        current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_14_DAYS)
-
-                    # Send the configuration link
-                    await update.message.reply_text(f"Payment confirmed. Here is your config link: {link}")
-
-                    # Send guidelines
-                    await update.message.reply_text(
-                        "GUIDELINES TO FOLLOW:\n\n"
-                        "1. SEARCH FOR A WORKING IP (10.60s or 10.200s)\n"
-                        "   Example IPs: 10.244; 10.217; 10.216; 10.247; 10.60; 10.246; 10.245; 10.244; 10.209; 10.62; 10.213; 10.210; 10.212; 10.61\n\n"
-                        "2. CONNECT THE TWO HTTP CUSTOM FILES EVERYDAY ONCE IN A DAY:\n"
-                        "   - File 1: 45MB\n"
-                        "   - File 2: 22MB\n"
-                        "   - If you have Roodito data, connect File 1 first, then HTTP Injector.\n\n"
-                        "   Get the 2 HTTP Custom files here: https://t.me/emmkashtech2/2884?single\n\n"
-                        "3. SEARCH FOR ANOTHER IP (must be from the list in Step 1).\n\n"
-                        "4. CONNECT HTTP Injector for unlimited access.\n\n"
-                        "For help, click here: @emmkash\n\n"
-                    )
-
-                    # Offer the user to choose another file
-                    await update.message.reply_text("Choose another file if needed:", reply_markup=InlineKeyboardMarkup([ 
-                        [InlineKeyboardButton("HTTP Injector 10 Days", callback_data="HTTP_10_DAYS")],
-                        [InlineKeyboardButton("HTTP Injector 14 Days", callback_data="HTTP_14_DAYS")],
-                    ]))
-                    return CHOOSING_TYPE
-                elif user_sent_links[user_id][selected_package]:
-                    await update.message.reply_text("You have already confirmed the payment and received the link for this package.")
-                    return CHOOSING_TYPE
-                else:
-                    await update.message.reply_text("The message you provided does not appear to be a valid M-Pesa confirmation. Please try again.")
-                    return ENTERING_MPESA_CONFIRMATION
+                # Confirm the transaction and send the link
+                await confirm_and_send_link(update, user_id, selected_package, mpesa_confirmation_message)
+                return CHOOSING_TYPE
             else:
                 await update.message.reply_text("The phone number associated with this payment does not match the one you provided. Please verify your payment or contact support.")
                 return ENTERING_MPESA_CONFIRMATION
@@ -164,6 +124,44 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("The transaction ID does not match with the provided confirmation message. Please verify your details.")
         return ENTERING_MPESA_CONFIRMATION
 
+async def confirm_and_send_link(update: Update, user_id: int, selected_package: str, mpesa_confirmation_message: str):
+    """Confirm the transaction and send the configuration link."""
+    # Mark the message as used and store the confirmation for the user
+    used_confirmation_messages.add(mpesa_confirmation_message)
+    user_sent_links[user_id][selected_package] = True
+
+    # Get the current link index for the selected package
+    if selected_package == "HTTP_10_DAYS":
+        link = FILE_LINKS_10_DAYS[current_link_index[selected_package]]
+        current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_10_DAYS)
+    else:
+        link = FILE_LINKS_14_DAYS[current_link_index[selected_package]]
+        current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_14_DAYS)
+
+    # Send the configuration link
+    await update.message.reply_text(f"Payment confirmed. Here is your config link: {link}")
+
+    # Send guidelines
+    await update.message.reply_text(
+        "GUIDELINES TO FOLLOW:\n\n"
+        "1. SEARCH FOR A WORKING IP (10.60s or 10.200s)\n"
+        "   Example IPs: 10.244; 10.217; 10.216; 10.247; 10.60; 10.246; 10.245; 10.244; 10.209; 10.62; 10.213; 10.210; 10.212; 10.61\n\n"
+        "2. CONNECT THE TWO HTTP CUSTOM FILES EVERYDAY ONCE IN A DAY:\n"
+        "   - File 1: 45MB\n"
+        "   - File 2: 22MB\n"
+        "   - If you have Roodito data, connect File 1 first, then HTTP Injector.\n\n"
+        "   Get the 2 HTTP Custom files here: https://t.me/emmkashtech2/2884?single\n\n"
+        "3. SEARCH FOR ANOTHER IP (must be from the list in Step 1).\n\n"
+        "4. CONNECT HTTP Injector for unlimited access.\n\n"
+        "For help, click here: @emmkash\n\n"
+    )
+
+    # Offer the user to choose another file
+    await update.message.reply_text("Choose another file if needed:", reply_markup=InlineKeyboardMarkup([ 
+        [InlineKeyboardButton("HTTP Injector 10 Days", callback_data="HTTP_10_DAYS")],
+        [InlineKeyboardButton("HTTP Injector 14 Days", callback_data="HTTP_14_DAYS")],
+    ]))
+
 async def initiate_stk_push(phone_number: str, amount: int, update: Update):
     """Initiate STK Push payment via PayHero API."""
     payload = {
@@ -172,90 +170,55 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://callback1-21e1c9a49f0d.ngrok.io/callback"
+        "callback_url": "https://callback1-21e1c9a49f0d.ngrok.io/callback",
     }
-
-    # Base64 encode the credentials
-    credentials = f"{API_USERNAME}:{API_PASSWORD}"
-    encoded_credentials = base64.b64encode(credentials.encode()).decode()
-
     headers = {
-        "Authorization": f"Basic {encoded_credentials}",
-        "Content-Type": "application/json"
+        "Authorization": f"Basic {base64.b64encode(f'{API_USERNAME}:{API_PASSWORD}'.encode()).decode()}",
+        "Content-Type": "application/json",
     }
 
-    try:
-        response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
-        response.raise_for_status()  # Raise an error for bad responses
-        logger.info("STK Push initiated successfully.")
-        return response.json().get("transaction_id")  # Return the transaction ID
-    except requests.RequestException as e:
-        logger.error(f"Error initiating STK Push: {e}")
+    response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
+    if response.status_code == 200:
+        transaction_id = response.json()["data"]["transaction_id"]
+        await update.message.reply_text("Payment initiated successfully! Please check your M-Pesa for a confirmation message.")
+        return transaction_id
+    else:
         await update.message.reply_text("Failed to initiate payment. Please try again later.")
         return None
 
 async def check_payment_status(transaction_id: str):
-    """Check payment status from PayHero API."""
-    url = f"{PAYHERO_API_URL}/{transaction_id}"
-    credentials = f"{API_USERNAME}:{API_PASSWORD}"
-    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+    """Check the payment status via PayHero API."""
+    response = requests.get(f"{PAYHERO_API_URL}/{transaction_id}")
+    if response.status_code == 200:
+        return response.json()["data"]["status"], response.json()["data"]["phone_number"]
+    return "failed", None
 
-    headers = {
-        "Authorization": f"Basic {encoded_credentials}",
-        "Content-Type": "application/json"
-    }
-
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        payment_data = response.json()
-        return payment_data.get("status"), payment_data.get("phone_number")  # Return status and phone number
-    except requests.RequestException as e:
-        logger.error(f"Error checking payment status: {e}")
-        return None, None
-
-async def verify_transaction_with_flask(transaction_id: str, confirmation_message: str):
+async def verify_transaction_with_flask(transaction_id: str, mpesa_confirmation_message: str):
     """Verify the transaction with the Flask app."""
-    try:
-        response = requests.get(f"{FLASK_APP_URL}/verify_transaction/{transaction_id}/{confirmation_message}")
-        return response.json().get("verified", False)  # Return whether the transaction is verified
-    except requests.RequestException as e:
-        logger.error(f"Error verifying transaction with Flask: {e}")
-        return False
+    response = requests.post(f"{FLASK_APP_URL}/verify_transaction", json={
+        "transaction_id": transaction_id,
+        "mpesa_confirmation_message": mpesa_confirmation_message
+    })
+    return response.status_code == 200 and response.json().get("status") == "success"
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Validate the M-Pesa confirmation message format."""
-    # Example of a basic check: ensure the message contains certain keywords
-    return "DUKE EMMANUEL KIRERA" in message  # Update with your specific criteria
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancels the conversation."""
-    await update.message.reply_text("Canceled the process.")
-    return ConversationHandler.END
+    """Check if the M-Pesa confirmation message is in the correct format."""
+    # Add your specific validation logic here
+    return True  # Implement your actual validation logic
 
 def main():
-    """Run the bot."""
+    """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # Set up conversation handler
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    )
-
-    application.add_handler(conv_handler)
-
-    # Run the bot
-    try:
-        application.run_polling()
-    except Exception as e:
-        logger.error(f"Error in main: {e}")
+        fallbacks=[],
+    ))
+    application.run_polling()
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
+    main()
