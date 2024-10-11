@@ -182,7 +182,6 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         return transaction_id
     else:
         await update.message.reply_text("Failed to initiate payment. Please try again.")
-        logger.error(f"STK Push error: {response.text}")
         return None
 
 async def check_payment_status(transaction_id: str):
@@ -198,37 +197,32 @@ async def check_payment_status(transaction_id: str):
 
     if response.status_code == 200:
         data = response.json()
-        return data.get("status"), data.get("phone_number")
+        return data.get("status"), data.get("phone_number")  # Assuming "phone_number" is returned with the status
     else:
         logger.error(f"Error checking payment status: {response.text}")
         return None, None
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
     """Validate the M-Pesa confirmation message format."""
-    pattern = r"Payment Received of Ksh \d+\.?\d* from \d+ for .*"
-    return bool(re.match(pattern, message))
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancels the conversation."""
-    await update.message.reply_text("Operation cancelled. Thank you!")
-    return ConversationHandler.END
+    keywords = ["Payment", "Received", "of", "Ksh"]
+    return all(keyword in message for keyword in keywords)
 
 def main():
-    """Start the bot."""
+    """Run the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler('start', start)],
     )
 
     application.add_handler(conv_handler)
     application.run_polling()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
+
