@@ -14,11 +14,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "YOUR_BOT_TOKEN"  # Your bot token
+BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
-API_USERNAME = "YOUR_API_USERNAME"
-API_PASSWORD = "YOUR_API_PASSWORD"
-FLASK_APP_URL = "YOUR_FLASK_APP_URL"  # Add your Flask app URL here
+API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
+API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
+FLASK_APP_URL = "https://callback1-21e1c9a49f0d.herokuapp.com/" # Add your Flask app URL here
 
 # Load file links from JSON
 def load_links():
