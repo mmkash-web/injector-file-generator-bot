@@ -40,8 +40,8 @@ current_link_index = {
 # Store sent config links and confirmation status for each user
 user_sent_links = {}
 
-# Track used M-Pesa confirmation messages globally
-used_confirmation_messages = set()
+# Track used transaction references globally
+used_transaction_references = set()
 
 # Define states for conversation
 CHOOSING_TYPE, ENTERING_PHONE, ENTERING_MPESA_CONFIRMATION = range(3)
@@ -74,10 +74,10 @@ async def enter_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE)
     selected_package = context.user_data["selected_package"]
 
     # Initiate STK Push
-    transaction_id = await initiate_stk_push(phone_number, 80 if selected_package == "HTTP_10_DAYS" else 100, update)
+    transaction_reference = await initiate_stk_push(phone_number, 80 if selected_package == "HTTP_10_DAYS" else 100, update)
 
-    # Store transaction ID in user data
-    context.user_data["transaction_id"] = transaction_id
+    # Store transaction reference in user data
+    context.user_data["transaction_reference"] = transaction_reference
 
     await update.message.reply_text("Payment initiated! Please enter the full M-Pesa confirmation message you received:✅")
     return ENTERING_MPESA_CONFIRMATION
@@ -87,7 +87,6 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
     mpesa_confirmation_message = update.message.text
     selected_package = context.user_data["selected_package"]
     user_id = update.effective_user.id
-    transaction_id = context.user_data["transaction_id"]
     user_phone_number = context.user_data["phone_number"]
 
     # Validate the confirmation message format
@@ -99,35 +98,27 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
     if user_id not in user_sent_links:
         user_sent_links[user_id] = {"HTTP_10_DAYS": False, "HTTP_14_DAYS": False}
 
-    # Check if confirmation message has been used before
-    if mpesa_confirmation_message in used_confirmation_messages:
-        await update.message.reply_text("This M-Pesa confirmation message has already been used. Please verify your payment or contact support.")
+    # Extract the transaction reference from the confirmation message
+    transaction_reference = context.user_data["transaction_reference"]
+
+    # Check if transaction reference has been used before
+    if transaction_reference in used_transaction_references:
+        await update.message.reply_text("This transaction reference has already been used. Please verify your payment or contact support.")
         return ENTERING_MPESA_CONFIRMATION
 
-    # Check payment status from PayHero
-    payment_status, payment_phone_number = await check_payment_status(transaction_id)
-
-    # Verify transaction with Flask app
-    if await verify_transaction_with_flask(transaction_id, mpesa_confirmation_message):
-        if payment_status == "successful":
-            if payment_phone_number == user_phone_number:
-                # Confirm the transaction and send the link
-                await confirm_and_send_link(update, user_id, selected_package, mpesa_confirmation_message)
-                return CHOOSING_TYPE
-            else:
-                await update.message.reply_text("The phone number associated with this payment does not match the one you provided. Please verify your payment or contact support.")
-                return ENTERING_MPESA_CONFIRMATION
-        else:
-            await update.message.reply_text("Payment is still pending. Please wait for confirmation.")
-            return ENTERING_MPESA_CONFIRMATION
+    # Verify transaction with Flask app using transaction reference
+    if await verify_transaction_with_flask(transaction_reference, mpesa_confirmation_message):
+        # Confirm the transaction and send the link
+        await confirm_and_send_link(update, user_id, selected_package, mpesa_confirmation_message)
+        return CHOOSING_TYPE
     else:
-        await update.message.reply_text("The transaction ID does not match with the provided confirmation message. Please verify your details.")
+        await update.message.reply_text("The transaction could not be verified. Please check your details or try again.")
         return ENTERING_MPESA_CONFIRMATION
 
 async def confirm_and_send_link(update: Update, user_id: int, selected_package: str, mpesa_confirmation_message: str):
     """Confirm the transaction and send the configuration link."""
-    # Mark the message as used and store the confirmation for the user
-    used_confirmation_messages.add(mpesa_confirmation_message)
+    # Mark the transaction reference as used and store the confirmation for the user
+    used_transaction_references.add(context.user_data["transaction_reference"])
     user_sent_links[user_id][selected_package] = True
 
     # Get the current link index for the selected package
@@ -179,37 +170,34 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
     response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
     if response.status_code == 200:
-        transaction_id = response.json()["data"]["transaction_id"]
+        transaction_reference = response.json()["data"]["transaction_reference"]  # Use Transaction Reference
         await update.message.reply_text("Payment initiated successfully! Please check your M-Pesa for a confirmation message.")
-        return transaction_id
+        return transaction_reference
     else:
         await update.message.reply_text("Failed to initiate payment. Please try again later.")
         return None
 
-async def check_payment_status(transaction_id: str):
-    """Check the payment status via PayHero API."""
-    response = requests.get(f"{PAYHERO_API_URL}/{transaction_id}")
-    if response.status_code == 200:
-        return response.json()["data"]["status"], response.json()["data"]["phone_number"]
-    return "failed", None
-
-async def verify_transaction_with_flask(transaction_id: str, mpesa_confirmation_message: str):
+async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
     """Verify the transaction with the Flask app."""
-    response = requests.post(f"{FLASK_APP_URL}/verify_transaction", json={
-        "transaction_id": transaction_id,
-        "mpesa_confirmation_message": mpesa_confirmation_message
-    })
-    return response.status_code == 200 and response.json().get("status") == "success"
+    url = f"{FLASK_APP_URL}/verify"
+    payload = {"transaction_reference": transaction_reference, "confirmation_message": mpesa_confirmation_message}
+    response = requests.post(url, json=payload)
+
+    if response.status_code == 200 and response.json().get("status") == "success":
+        return True
+    return False
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Check if the M-Pesa confirmation message is in the correct format."""
-    # Add your specific validation logic here
-    return True  # Implement your actual validation logic
+    """Validate the format of the M-Pesa confirmation message."""
+    # You can implement more advanced validation based on your needs
+    return len(message) > 10 and "confirmed" in message.lower()
 
 def main():
-    """Start the bot."""
+    """Run the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    application.add_handler(ConversationHandler(
+
+    # Define conversation handler with states
+    conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
@@ -217,8 +205,13 @@ def main():
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
         fallbacks=[],
-    ))
+    )
+
+    # Add the conversation handler to the application
+    application.add_handler(conv_handler)
+
+    # Start the bot
     application.run_polling()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
