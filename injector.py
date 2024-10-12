@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "YOUR_BOT_TOKEN"  # Your bot token
+BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
 API_USERNAME = "YOUR_API_USERNAME"
 API_PASSWORD = "YOUR_API_PASSWORD"
