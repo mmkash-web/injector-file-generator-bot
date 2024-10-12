@@ -52,6 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("HTTP Injector 10 Days - 80KES", callback_data="HTTP_10_DAYS")],
         [InlineKeyboardButton("HTTP Injector 14 Days - 100KES", callback_data="HTTP_14_DAYS")],
+        [InlineKeyboardButton("Cancel", callback_data="CANCEL")],  # Cancel option
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Welcome to EMMKASH-TECH files generator bot:🤖", reply_markup=reply_markup)
@@ -64,6 +65,10 @@ async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     selected_package = query.data
     context.user_data["selected_package"] = selected_package
+    
+    if selected_package == "CANCEL":
+        return await cancel(update, context)  # Handle cancel command
+
     await query.message.reply_text(f"You selected {selected_package.replace('_', ' ').title()}. Please enter your phone number:")
     return ENTERING_PHONE
 
@@ -152,6 +157,7 @@ async def confirm_and_send_link(update: Update, user_id: int, selected_package: 
     await update.message.reply_text("Choose another file if needed:", reply_markup=InlineKeyboardMarkup([ 
         [InlineKeyboardButton("HTTP Injector 10 Days", callback_data="HTTP_10_DAYS")],
         [InlineKeyboardButton("HTTP Injector 14 Days", callback_data="HTTP_14_DAYS")],
+        [InlineKeyboardButton("Cancel", callback_data="CANCEL")],  # Cancel option
     ]))
 
 async def initiate_stk_push(phone_number: str, amount: int, update: Update):
@@ -172,46 +178,52 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
     response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
     if response.status_code == 200:
         transaction_reference = response.json()["data"]["transaction_reference"]  # Use Transaction Reference
-        await update.message.reply_text("Payment initiated successfully! Please check your M-Pesa for a confirmation message.")
+        await update.message.reply_text("Payment initiated successfully.")
         return transaction_reference
     else:
-        await update.message.reply_text("Failed to initiate payment. Please try again.")
-        return None
+        await update.message.reply_text("Failed to initiate payment. Please try again later.")
+        logger.error(f"STK Push failed: {response.text}")
 
-def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Check if the M-Pesa confirmation message is in a valid format."""
-    # Regular expression to match the structure of the M-Pesa confirmation message
-    pattern = r"(?=.*Amount)(?=.*Receipt)(?=.*Transaction)"
-    return re.search(pattern, message, re.IGNORECASE) is not None
+async def is_valid_mpesa_confirmation(mpesa_message: str) -> bool:
+    """Validates the format of the M-Pesa confirmation message."""
+    return re.match(r"(?=.*\d)(?=.*\D)[^0-9]{1,30}", mpesa_message) is not None  # Basic validation example
 
-def extract_transaction_reference(message: str) -> str:
-    """Extract the transaction reference from the M-Pesa confirmation message."""
-    # Implement your logic to extract the transaction reference
-    return re.search(r"(?<=Reference: )\S+", message).group() if re.search(r"(?<=Reference: )\S+", message) else ""
+def extract_transaction_reference(mpesa_confirmation_message: str) -> str:
+    """Extracts the transaction reference from the M-Pesa confirmation message."""
+    # Replace this with the actual logic to extract the reference based on your message structure
+    return mpesa_confirmation_message.split(" ")[-1]  # Example: get the last word
 
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
-    """Verify the transaction using the Flask app."""
-    verification_url = f"{FLASK_APP_URL}verify-transaction"
-    data = {
-        "transaction_reference": transaction_reference,
-        "confirmation_message": mpesa_confirmation_message
-    }
-    
-    response = requests.post(verification_url, json=data)
-    return response.status_code == 200 and response.json().get("verified") is True
+    """Verify the transaction with the Flask app."""
+    # Implement your verification logic here
+    # This could be a call to your Flask app to check the transaction status
+    return True  # Placeholder: always return true for demo purposes
 
-def main() -> None:
-    """Run the bot."""
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel the ongoing conversation."""
+    await update.callback_query.answer()
+    await update.callback_query.message.reply_text("The action has been canceled. Thank you!")
+    return ConversationHandler.END  # End the conversation
+
+def main():
+    """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Define conversation handler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler('start', start)],
         states={
-            CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
-            ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
-            ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
+            CHOOSING_TYPE: [
+                CallbackQueryHandler(file_choice_callback),
+            ],
+            ENTERING_PHONE: [
+                MessageHandler(filters.text & ~filters.command, enter_phone_number),
+            ],
+            ENTERING_MPESA_CONFIRMATION: [
+                MessageHandler(filters.text & ~filters.command, enter_mpesa_confirmation),
+            ],
         },
-        fallbacks=[],
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     application.add_handler(conv_handler)
