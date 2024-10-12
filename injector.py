@@ -180,44 +180,58 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 def is_valid_mpesa_confirmation(message: str) -> bool:
     """Check if the M-Pesa confirmation message is in a valid format."""
     # Basic validation: check if the message contains certain keywords
-    return "Payment" in message and "of" in message
+    return (
+        "Payment" in message and 
+        "of" in message and 
+        "to" in message and 
+        "on" in message
+    )
 
 def extract_transaction_reference(message: str) -> str:
     """Extract the transaction reference from the M-Pesa confirmation message."""
-    # This should be improved based on the actual message format
-    return message.split(" ")[-1]  # Assuming the reference is the last word in the message
+    # Modify this based on the actual message format
+    parts = message.split()
+    
+    # Check if the parts contain enough information
+    if len(parts) >= 4:  # Ensure there are enough words in the message
+        return parts[-4]  # Assuming the transaction reference is 4 words from the end
+    return "unknown_reference"  # Default return if format is unexpected
 
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
-    """Verify the transaction with the Flask API."""
-    response = requests.post(f"{FLASK_APP_URL}verify_transaction", json={
-        "transaction_reference": transaction_reference,
-        "mpesa_confirmation_message": mpesa_confirmation_message,
-    })
-    return response.status_code == 200 and response.json().get("verified", False)
+    """Verify the transaction with your Flask app."""
+    try:
+        response = requests.post(FLASK_APP_URL + "verify_transaction", json={
+            "transaction_reference": transaction_reference,
+            "mpesa_confirmation_message": mpesa_confirmation_message
+        })
+        return response.status_code == 200 and response.json().get("verified", False)
+    except Exception as e:
+        logger.error(f"Error verifying transaction: {e}")
+        return False
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation."""
-    await update.message.reply_text("Operation cancelled. Thank you!")
+    """Handle cancellation of the operation."""
+    await update.message.reply_text("Operation cancelled. You can start again with /start.")
     return ConversationHandler.END
 
-def main() -> None:
+def main():
     """Start the bot."""
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # Set up conversation handler with states
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Define conversation handler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
     
-    application.add_handler(conv_handler)
+    app.add_handler(conv_handler)
+    
+    app.run_polling()
 
-    application.run_polling()
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
