@@ -4,6 +4,7 @@ import json
 import time
 import base64
 import requests
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
@@ -179,46 +180,35 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
     """Check if the M-Pesa confirmation message is in a valid format."""
-    # Basic validation: check if the message contains certain keywords
-    return (
-        "Payment" in message and 
-        "of" in message and 
-        "to" in message and 
-        "on" in message
-    )
+    # Regular expression to match the structure of the M-Pesa confirmation message
+    pattern = r"^[A-Z0-9]+ Confirmed\. Ksh[\d,]+\.\d{2} paid to [A-Z ]+-\d{1,} on \d{1,2}/\d{1,2}/\d{2} at \d{1,2}:\d{2} [AP]M\. New M-PESA balance is Ksh[\d,]+\.\d{2}\. Transaction cost, Ksh[\d,]+\.\d{2}\. Amount you can transact within the day is [\d,]+\.\d{2}\."
+
+    # Check if the message matches the expected format
+    return bool(re.match(pattern, message))
 
 def extract_transaction_reference(message: str) -> str:
-    """Extract the transaction reference from the M-Pesa confirmation message."""
-    # Modify this based on the actual message format
-    parts = message.split()
-    
-    # Check if the parts contain enough information
-    if len(parts) >= 4:  # Ensure there are enough words in the message
-        return parts[-4]  # Assuming the transaction reference is 4 words from the end
-    return "unknown_reference"  # Default return if format is unexpected
+    """Extract transaction reference from the M-Pesa confirmation message."""
+    # Implement the logic to extract the reference based on your confirmation message structure
+    return message.split(" ")[1]  # Adjust based on the actual message structure
 
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
-    """Verify the transaction with your Flask app."""
-    try:
-        response = requests.post(FLASK_APP_URL + "verify_transaction", json={
-            "transaction_reference": transaction_reference,
-            "mpesa_confirmation_message": mpesa_confirmation_message
-        })
-        return response.status_code == 200 and response.json().get("verified", False)
-    except Exception as e:
-        logger.error(f"Error verifying transaction: {e}")
-        return False
+    """Verify the transaction using Flask app."""
+    response = requests.post(f"{FLASK_APP_URL}/verify_transaction", json={
+        "transaction_reference": transaction_reference,
+        "mpesa_confirmation_message": mpesa_confirmation_message
+    })
+    return response.status_code == 200 and response.json().get("verified", False)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle cancellation of the operation."""
-    await update.message.reply_text("Operation cancelled. You can start again with /start.")
+    """Cancel the current conversation."""
+    await update.message.reply_text("Thank you! You can start again by sending /start.")
     return ConversationHandler.END
 
 def main():
     """Start the bot."""
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    # Define conversation handler
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # Add handlers for the conversation
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -228,10 +218,10 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
-    
-    app.add_handler(conv_handler)
-    
-    app.run_polling()
+
+    application.add_handler(conv_handler)
+
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
