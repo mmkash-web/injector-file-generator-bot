@@ -15,10 +15,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
+BOT_TOKEN = "YOUR_BOT_TOKEN"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
-API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
-API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
+API_USERNAME = "YOUR_API_USERNAME"
+API_PASSWORD = "YOUR_API_PASSWORD"
 FLASK_APP_URL = "https://callback1-21e1c9a49f0d.herokuapp.com/"  # Add your Flask app URL here
 
 # Load file links from JSON
@@ -153,10 +153,11 @@ async def confirm_and_send_link(update: Update, user_id: int, selected_package: 
         "For help, click here: @emmkash\n\n"
     )
 
-    # Offer the user to choose another file
+    # Offer the user to choose another file or go back
     await update.message.reply_text("Choose another file if needed:", reply_markup=InlineKeyboardMarkup([ 
         [InlineKeyboardButton("HTTP Injector 10 Days", callback_data="HTTP_10_DAYS")],
         [InlineKeyboardButton("HTTP Injector 14 Days", callback_data="HTTP_14_DAYS")],
+        [InlineKeyboardButton("Back to Main Menu", callback_data="BACK_TO_MAIN_MENU")],
         [InlineKeyboardButton("Cancel", callback_data="CANCEL")],  # Cancel option
     ]))
 
@@ -210,6 +211,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.reply_text("Operation canceled.")
     return ConversationHandler.END
 
+async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle the back to main menu command."""
+    await start(update, context)
+
 def main():
     """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -225,6 +230,9 @@ def main():
     )
     
     application.add_handler(conv_handler)
+
+    # Add handler for back to main menu
+    application.add_handler(CallbackQueryHandler(back_to_main_menu, pattern="BACK_TO_MAIN_MENU"))
 
     application.run_polling()
 
