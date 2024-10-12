@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
+BOT_TOKEN = "YOUR_BOT_TOKEN"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
 API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
 API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
@@ -99,7 +99,7 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
         user_sent_links[user_id] = {"HTTP_10_DAYS": False, "HTTP_14_DAYS": False}
 
     # Extract the transaction reference from the confirmation message
-    transaction_reference = context.user_data["transaction_reference"]
+    transaction_reference = extract_transaction_reference(mpesa_confirmation_message)
 
     # Check if transaction reference has been used before
     if transaction_reference in used_transaction_references:
@@ -174,38 +174,51 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         await update.message.reply_text("Payment initiated successfully! Please check your M-Pesa for a confirmation message.")
         return transaction_reference
     else:
-        await update.message.reply_text("Failed to initiate payment. Please try again later.")
+        await update.message.reply_text("Failed to initiate payment. Please try again.")
         return None
+
+def is_valid_mpesa_confirmation(message: str) -> bool:
+    """Check if the M-Pesa confirmation message is in a valid format."""
+    return "Transaction ID:" in message and "Amount:" in message
+
+def extract_transaction_reference(message: str) -> str:
+    """Extract the transaction reference from the confirmation message."""
+    lines = message.splitlines()
+    for line in lines:
+        if "Transaction ID:" in line:
+            return line.split(":")[1].strip()
+    return ""
 
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
     """Verify the transaction with the Flask app."""
-    url = f"{FLASK_APP_URL}/verify"
-    payload = {"transaction_reference": transaction_reference, "confirmation_message": mpesa_confirmation_message}
-    response = requests.post(url, json=payload)
-    return response.status_code == 200 and response.json().get("status") == "success"
-
-def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Check if the M-Pesa confirmation message has the expected format."""
-    return "Confirmation" in message and "of Ksh" in message and "to" in message
+    response = requests.post(FLASK_APP_URL, json={
+        "transaction_reference": transaction_reference,
+        "mpesa_confirmation_message": mpesa_confirmation_message,
+    })
+    return response.status_code == 200 and response.json().get("status") == "confirmed"
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancels the current operation."""
-    await update.message.reply_text("Operation cancelled. You can start over by typing /start.")
+    """Cancel the conversation."""
+    await update.message.reply_text("Goodbye! Use /start to initiate again.")
     return ConversationHandler.END
 
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+def main():
+    """Start the bot."""
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Create the conversation handler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    app.add_handler(conv_handler)
-    app.run_polling()
+    application.add_handler(conv_handler)
+
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
