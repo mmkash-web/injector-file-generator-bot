@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"   # Your bot token
+BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
 API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
 API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
@@ -109,16 +109,16 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
     # Verify transaction with Flask app using transaction reference
     if await verify_transaction_with_flask(transaction_reference, mpesa_confirmation_message):
         # Confirm the transaction and send the link
-        await confirm_and_send_link(update, user_id, selected_package, mpesa_confirmation_message)
+        await confirm_and_send_link(update, user_id, selected_package, mpesa_confirmation_message, transaction_reference)
         return CHOOSING_TYPE
     else:
         await update.message.reply_text("The transaction could not be verified. Please check your details or try again.")
         return ENTERING_MPESA_CONFIRMATION
 
-async def confirm_and_send_link(update: Update, user_id: int, selected_package: str, mpesa_confirmation_message: str):
+async def confirm_and_send_link(update: Update, user_id: int, selected_package: str, mpesa_confirmation_message: str, transaction_reference: str):
     """Confirm the transaction and send the configuration link."""
     # Mark the transaction reference as used and store the confirmation for the user
-    used_transaction_references.add(context.user_data["transaction_reference"])
+    used_transaction_references.add(transaction_reference)
     user_sent_links[user_id][selected_package] = True
 
     # Get the current link index for the selected package
@@ -179,33 +179,32 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
     """Check if the M-Pesa confirmation message is in a valid format."""
-    return "Transaction ID:" in message and "Amount:" in message
+    # Basic validation: check if the message contains certain keywords
+    return "Payment" in message and "of" in message
 
 def extract_transaction_reference(message: str) -> str:
-    """Extract the transaction reference from the confirmation message."""
-    lines = message.splitlines()
-    for line in lines:
-        if "Transaction ID:" in line:
-            return line.split(":")[1].strip()
-    return ""
+    """Extract the transaction reference from the M-Pesa confirmation message."""
+    # This should be improved based on the actual message format
+    return message.split(" ")[-1]  # Assuming the reference is the last word in the message
 
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
-    """Verify the transaction with the Flask app."""
-    response = requests.post(FLASK_APP_URL, json={
+    """Verify the transaction with the Flask API."""
+    response = requests.post(f"{FLASK_APP_URL}verify_transaction", json={
         "transaction_reference": transaction_reference,
         "mpesa_confirmation_message": mpesa_confirmation_message,
     })
-    return response.status_code == 200 and response.json().get("status") == "confirmed"
+    return response.status_code == 200 and response.json().get("verified", False)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the conversation."""
-    await update.message.reply_text("Goodbye! Use /start to initiate again.")
+    await update.message.reply_text("Operation cancelled. Thank you!")
     return ConversationHandler.END
 
-def main():
+def main() -> None:
     """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Set up conversation handler with states
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -215,7 +214,7 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
-
+    
     application.add_handler(conv_handler)
 
     application.run_polling()
