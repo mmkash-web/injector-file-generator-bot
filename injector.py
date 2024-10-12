@@ -181,46 +181,40 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 def is_valid_mpesa_confirmation(message: str) -> bool:
     """Check if the M-Pesa confirmation message is in a valid format."""
     # Regular expression to match the structure of the M-Pesa confirmation message
-    pattern = r"^[A-Z0-9]+ Confirmed\. Ksh[\d,]+\.\d{2} paid to [A-Z ]+-\d{1,} on \d{1,2}/\d{1,2}/\d{2} at \d{1,2}:\d{2} [AP]M\. New M-PESA balance is Ksh[\d,]+\.\d{2}\. Transaction cost, Ksh[\d,]+\.\d{2}\. Amount you can transact within the day is [\d,]+\.\d{2}\."
-
-    # Check if the message matches the expected format
-    return bool(re.match(pattern, message))
+    pattern = r"(?=.*Amount)(?=.*Receipt)(?=.*Transaction)"
+    return re.search(pattern, message, re.IGNORECASE) is not None
 
 def extract_transaction_reference(message: str) -> str:
-    """Extract transaction reference from the M-Pesa confirmation message."""
-    # Implement the logic to extract the reference based on your confirmation message structure
-    return message.split(" ")[1]  # Adjust based on the actual message structure
+    """Extract the transaction reference from the M-Pesa confirmation message."""
+    # Implement your logic to extract the transaction reference
+    return re.search(r"(?<=Reference: )\S+", message).group() if re.search(r"(?<=Reference: )\S+", message) else ""
 
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
-    """Verify the transaction using Flask app."""
-    response = requests.post(f"{FLASK_APP_URL}/verify_transaction", json={
+    """Verify the transaction using the Flask app."""
+    verification_url = f"{FLASK_APP_URL}verify-transaction"
+    data = {
         "transaction_reference": transaction_reference,
-        "mpesa_confirmation_message": mpesa_confirmation_message
-    })
-    return response.status_code == 200 and response.json().get("verified", False)
+        "confirmation_message": mpesa_confirmation_message
+    }
+    
+    response = requests.post(verification_url, json=data)
+    return response.status_code == 200 and response.json().get("verified") is True
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the current conversation."""
-    await update.message.reply_text("Thank you! You can start again by sending /start.")
-    return ConversationHandler.END
-
-def main():
-    """Start the bot."""
+def main() -> None:
+    """Run the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Add handlers for the conversation
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        fallbacks=[],
     )
 
     application.add_handler(conv_handler)
-
     application.run_polling()
 
 if __name__ == '__main__':
