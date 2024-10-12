@@ -180,40 +180,38 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
     """Verify the transaction with the Flask app."""
     url = f"{FLASK_APP_URL}/verify"
-    payload = {"transaction_reference": transaction_reference, "confirmation_message": mpesa_confirmation_message}
-    response = requests.post(url, json=payload)
-    return response.status_code == 200
+    payload = {"transaction_reference": transaction_reference, "mpesa_message": mpesa_confirmation_message}
+    
+    response = requests.get(url, params=payload)
+    if response.status_code == 200:
+        transaction_data = response.json()
+        return transaction_data["status"] == "Completed"
+    else:
+        return False
 
-def is_valid_mpesa_confirmation(confirmation_message: str) -> bool:
-    """Checks if the M-Pesa confirmation message is valid (dummy validation)."""
-    return confirmation_message.startswith("MPESA")
-
-# Add a cancel function
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancels the current operation and ends the conversation."""
-    await update.message.reply_text("Operation cancelled. If you need to start again, use /start.")
-    return ConversationHandler.END
+def is_valid_mpesa_confirmation(mpesa_message: str) -> bool:
+    """Validate if the M-Pesa confirmation message is in a valid format."""
+    return "Confirmed" in mpesa_message and "Ksh" in mpesa_message
 
 def main():
-    """Run the bot."""
+    """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Define conversation handler with states
+    # Conversation handler to manage the state flow
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],  # Add cancel command as a fallback
+        fallbacks=[CommandHandler('start', start)],
     )
 
-    # Add the conversation handler to the application
     application.add_handler(conv_handler)
 
     # Start the bot
     application.run_polling()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
