@@ -182,15 +182,17 @@ async def verify_transaction_with_flask(transaction_reference: str, mpesa_confir
     url = f"{FLASK_APP_URL}/verify"
     payload = {"transaction_reference": transaction_reference, "confirmation_message": mpesa_confirmation_message}
     response = requests.post(url, json=payload)
+    return response.status_code == 200
 
-    if response.status_code == 200 and response.json().get("status") == "success":
-        return True
-    return False
+def is_valid_mpesa_confirmation(confirmation_message: str) -> bool:
+    """Checks if the M-Pesa confirmation message is valid (dummy validation)."""
+    return confirmation_message.startswith("MPESA")
 
-def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Validate the format of the M-Pesa confirmation message."""
-    # You can implement more advanced validation based on your needs
-    return len(message) > 10 and "confirmed" in message.lower()
+# Add a cancel function
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancels the current operation and ends the conversation."""
+    await update.message.reply_text("Operation cancelled. If you need to start again, use /start.")
+    return ConversationHandler.END
 
 def main():
     """Run the bot."""
@@ -204,7 +206,7 @@ def main():
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[],
+        fallbacks=[CommandHandler("cancel", cancel)],  # Add cancel command as a fallback
     )
 
     # Add the conversation handler to the application
