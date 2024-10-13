@@ -13,7 +13,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s', level=loggi
 logger = logging.getLogger(__name__)
 
 # MongoDB connection with credentials
-MONGO_URI = "mongodb+srv://admin:y1Y6kNKXol48UMp7Cmij@mongodb-542f00de-o22372ca4.database.cloud.ovh.net/admin?replicaSet=replicaset&tls=true"
+MONGO_URI = "your_mongo_uri"
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["payment_bot_db"]  # Database name
 payments_collection = db["payments"]  # Collection name to store payments
@@ -37,7 +37,6 @@ FILE_LINKS_14_DAYS = links["HTTP_14_DAYS"]
 
 current_link_index = {"HTTP_10_DAYS": 0, "HTTP_14_DAYS": 0}
 user_sent_links = {}  # To track user payments
-used_transaction_references = set()
 
 # Define conversation states
 CHOOSING_TYPE, ENTERING_PHONE, ENTERING_MPESA_CONFIRMATION = range(3)
@@ -89,8 +88,8 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
     # Extract the transaction reference
     transaction_reference = context.user_data["transaction_reference"]
 
-    # Verify transaction and store it in MongoDB
-    if await verify_transaction_with_flask(transaction_reference, mpesa_confirmation_message):
+    # Directly verify the transaction with the Payhero API
+    if await verify_transaction_with_payhero(transaction_reference):
         # Store the payment in MongoDB
         payment_data = {
             "user_id": user_id,
@@ -109,7 +108,6 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
 
 # Confirm and send the config link
 async def confirm_and_send_link(update: Update, user_id: int, selected_package: str, mpesa_confirmation_message: str):
-    used_transaction_references.add(context.user_data["transaction_reference"])
     user_sent_links[user_id][selected_package] = True
 
     link = FILE_LINKS_10_DAYS[current_link_index[selected_package]] if selected_package == "HTTP_10_DAYS" else FILE_LINKS_14_DAYS[current_link_index[selected_package]]
@@ -125,8 +123,8 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "phone_number": phone_number,
         "channel_id": 852,
         "provider": "m-pesa",
-        "external_reference": "INV-009",
-        "callback_url": FLASK_APP_URL + "/callback",
+        "external_reference": f"INV-{int(time.time())}",  # Ensure a unique reference
+        "callback_url": "http://your-callback-url",  # Not used if not using Flask
     }
     headers = {
         "Authorization": f"Basic {base64.b64encode(f'{API_USERNAME}:{API_PASSWORD}'.encode()).decode()}",
@@ -134,6 +132,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
     }
 
     response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
+    logger.info(f"STK Push response: {response.status_code} - {response.text}")  # Log response
     if response.status_code == 200:
         transaction_reference = response.json()["data"]["transaction_reference"]
         await update.message.reply_text("Payment initiated successfully! Check M-Pesa for a confirmation message.")
@@ -142,10 +141,15 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         await update.message.reply_text("Failed to initiate payment. Please try again later.")
         return None
 
-async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str):
-    url = f"{FLASK_APP_URL}/verify"
-    payload = {"transaction_reference": transaction_reference, "mpesa_message": mpesa_confirmation_message}
-    response = requests.get(url, params=payload)
+async def verify_transaction_with_payhero(transaction_reference: str):
+    # Replace with the actual endpoint for transaction verification if available
+    url = f"{PAYHERO_API_URL}/verify"  # This is just an example; update it based on actual documentation
+    headers = {
+        "Authorization": f"Basic {base64.b64encode(f'{API_USERNAME}:{API_PASSWORD}'.encode()).decode()}",
+        "Content-Type": "application/json",
+    }
+    response = requests.get(url, headers=headers, params={"transaction_reference": transaction_reference})
+    logger.info(f"Transaction verification response: {response.status_code} - {response.text}")
     return response.status_code == 200 and response.json().get("status") == "Completed"
 
 def is_valid_mpesa_confirmation(mpesa_message: str) -> bool:
@@ -167,3 +171,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
