@@ -6,19 +6,24 @@ import base64
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from pymongo import MongoClient
 
 # Configure logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s', level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# MongoDB connection with credentials
+MONGO_URI = "mongodb+srv://admin:y1Y6kNKXol48UMp7Cmij@mongodb-542f00de-o22372ca4.database.cloud.ovh.net/admin?replicaSet=replicaset&tls=true"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["payment_bot_db"]  # Database name
+payments_collection = db["payments"]  # Collection name to store payments
+
 # Load environment variables
-BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
+BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Replace with your actual bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
 API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
-API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
-FLASK_APP_URL = "https://callback1-21e1c9a49f0d.herokuapp.com/"  # Add your Flask app URL here
+API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEBOr8R46EQiBUvkD"
+FLASK_APP_URL = "https://callback1-21e1c9a49f0d.herokuapp.com/"  # Flask app URL for verifying transactions
 
 # Load file links from JSON
 def load_links():
@@ -26,28 +31,19 @@ def load_links():
     with open('links.json', 'r') as file:
         return json.load(file)
 
-# Load the links into variables
 links = load_links()
 FILE_LINKS_10_DAYS = links["HTTP_10_DAYS"]
 FILE_LINKS_14_DAYS = links["HTTP_14_DAYS"]
 
-# Store the current index of the link sent for each file type
-current_link_index = {
-    "HTTP_10_DAYS": 0,
-    "HTTP_14_DAYS": 0,
-}
-
-# Store sent config links and confirmation status for each user
-user_sent_links = {}
-
-# Track used transaction references globally
+current_link_index = {"HTTP_10_DAYS": 0, "HTTP_14_DAYS": 0}
+user_sent_links = {}  # To track user payments
 used_transaction_references = set()
 
-# Define states for conversation
+# Define conversation states
 CHOOSING_TYPE, ENTERING_PHONE, ENTERING_MPESA_CONFIRMATION = range(3)
 
+# Start Command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Starts the bot and sends the welcome message."""
     keyboard = [
         [InlineKeyboardButton("HTTP Injector 10 Days - 80KES", callback_data="HTTP_10_DAYS")],
         [InlineKeyboardButton("HTTP Injector 14 Days - 100KES", callback_data="HTTP_14_DAYS")],
@@ -56,34 +52,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Welcome to EMMKASH-TECH files generator bot:🤖", reply_markup=reply_markup)
     return CHOOSING_TYPE
 
+# File selection
 async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the file type choice and asks for the phone number."""
     query = update.callback_query
     await query.answer()
-
     selected_package = query.data
     context.user_data["selected_package"] = selected_package
     await query.message.reply_text(f"You selected {selected_package.replace('_', ' ').title()}. Please enter your phone number:")
     return ENTERING_PHONE
 
+# Handle phone number entry and initiate STK push
 async def enter_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles phone number input and proceeds with the payment."""
     phone_number = update.message.text
     context.user_data["phone_number"] = phone_number
-
     selected_package = context.user_data["selected_package"]
-
+    
     # Initiate STK Push
     transaction_reference = await initiate_stk_push(phone_number, 80 if selected_package == "HTTP_10_DAYS" else 100, update)
-
-    # Store transaction reference in user data
     context.user_data["transaction_reference"] = transaction_reference
-
+    
     await update.message.reply_text("Payment initiated! Please enter the full M-Pesa confirmation message you received:✅")
     return ENTERING_MPESA_CONFIRMATION
 
+# Store payment confirmation in MongoDB
 async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles M-Pesa confirmation message input and sends the config link."""
     mpesa_confirmation_message = update.message.text
     selected_package = context.user_data["selected_package"]
     user_id = update.effective_user.id
@@ -94,74 +86,47 @@ async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("Invalid M-Pesa confirmation message format. Please try again.")
         return ENTERING_MPESA_CONFIRMATION
 
-    # Check if the user has already confirmed for this package
-    if user_id not in user_sent_links:
-        user_sent_links[user_id] = {"HTTP_10_DAYS": False, "HTTP_14_DAYS": False}
-
-    # Extract the transaction reference from the confirmation message
+    # Extract the transaction reference
     transaction_reference = context.user_data["transaction_reference"]
 
-    # Check if transaction reference has been used before
-    if transaction_reference in used_transaction_references:
-        await update.message.reply_text("This transaction reference has already been used. Please verify your payment or contact support.")
-        return ENTERING_MPESA_CONFIRMATION
-
-    # Verify transaction with Flask app using transaction reference
+    # Verify transaction and store it in MongoDB
     if await verify_transaction_with_flask(transaction_reference, mpesa_confirmation_message):
-        # Confirm the transaction and send the link
+        # Store the payment in MongoDB
+        payment_data = {
+            "user_id": user_id,
+            "phone_number": user_phone_number,
+            "transaction_reference": transaction_reference,
+            "confirmation_message": mpesa_confirmation_message,
+            "package": selected_package,
+            "timestamp": time.time(),
+        }
+        payments_collection.insert_one(payment_data)  # Insert payment data into MongoDB
         await confirm_and_send_link(update, user_id, selected_package, mpesa_confirmation_message)
         return CHOOSING_TYPE
     else:
         await update.message.reply_text("The transaction could not be verified. Please check your details or try again.")
         return ENTERING_MPESA_CONFIRMATION
 
+# Confirm and send the config link
 async def confirm_and_send_link(update: Update, user_id: int, selected_package: str, mpesa_confirmation_message: str):
-    """Confirm the transaction and send the configuration link."""
-    # Mark the transaction reference as used and store the confirmation for the user
     used_transaction_references.add(context.user_data["transaction_reference"])
     user_sent_links[user_id][selected_package] = True
 
-    # Get the current link index for the selected package
-    if selected_package == "HTTP_10_DAYS":
-        link = FILE_LINKS_10_DAYS[current_link_index[selected_package]]
-        current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_10_DAYS)
-    else:
-        link = FILE_LINKS_14_DAYS[current_link_index[selected_package]]
-        current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_14_DAYS)
+    link = FILE_LINKS_10_DAYS[current_link_index[selected_package]] if selected_package == "HTTP_10_DAYS" else FILE_LINKS_14_DAYS[current_link_index[selected_package]]
+    current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_10_DAYS if selected_package == "HTTP_10_DAYS" else FILE_LINKS_14_DAYS)
 
-    # Send the configuration link
     await update.message.reply_text(f"Payment confirmed. Here is your config link: {link}")
+    await update.message.reply_text("Thank you for your payment!")
 
-    # Send guidelines
-    await update.message.reply_text(
-        "GUIDELINES TO FOLLOW:\n\n"
-        "1. SEARCH FOR A WORKING IP (10.60s or 10.200s)\n"
-        "   Example IPs: 10.244; 10.217; 10.216; 10.247; 10.60; 10.246; 10.245; 10.244; 10.209; 10.62; 10.213; 10.210; 10.212; 10.61\n\n"
-        "2. CONNECT THE TWO HTTP CUSTOM FILES EVERYDAY ONCE IN A DAY:\n"
-        "   - File 1: 45MB\n"
-        "   - File 2: 22MB\n"
-        "   - If you have Roodito data, connect File 1 first, then HTTP Injector.\n\n"
-        "   Get the 2 HTTP Custom files here: https://t.me/emmkashtech2/2884?single\n\n"
-        "3. SEARCH FOR ANOTHER IP (must be from the list in Step 1).\n\n"
-        "4. CONNECT HTTP Injector for unlimited access.\n\n"
-        "For help, click here: @emmkash\n\n"
-    )
-
-    # Offer the user to choose another file
-    await update.message.reply_text("Choose another file if needed:", reply_markup=InlineKeyboardMarkup([ 
-        [InlineKeyboardButton("HTTP Injector 10 Days", callback_data="HTTP_10_DAYS")],
-        [InlineKeyboardButton("HTTP Injector 14 Days", callback_data="HTTP_14_DAYS")],
-    ]))
-
+# Helper functions: STK Push, validation, etc.
 async def initiate_stk_push(phone_number: str, amount: int, update: Update):
-    """Initiate STK Push payment via PayHero API."""
     payload = {
         "amount": amount,
         "phone_number": phone_number,
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://callback1-21e1c9a49f0d.ngrok.io/callback",
+        "callback_url": FLASK_APP_URL + "/callback",
     }
     headers = {
         "Authorization": f"Basic {base64.b64encode(f'{API_USERNAME}:{API_PASSWORD}'.encode()).decode()}",
@@ -170,34 +135,24 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
 
     response = requests.post(PAYHERO_API_URL, headers=headers, json=payload)
     if response.status_code == 200:
-        transaction_reference = response.json()["data"]["transaction_reference"]  # Use Transaction Reference
-        await update.message.reply_text("Payment initiated successfully! Please check your M-Pesa for a confirmation message.")
+        transaction_reference = response.json()["data"]["transaction_reference"]
+        await update.message.reply_text("Payment initiated successfully! Check M-Pesa for a confirmation message.")
         return transaction_reference
     else:
         await update.message.reply_text("Failed to initiate payment. Please try again later.")
         return None
 
-async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str) -> bool:
-    """Verify the transaction with the Flask app."""
+async def verify_transaction_with_flask(transaction_reference: str, mpesa_confirmation_message: str):
     url = f"{FLASK_APP_URL}/verify"
     payload = {"transaction_reference": transaction_reference, "mpesa_message": mpesa_confirmation_message}
-    
     response = requests.get(url, params=payload)
-    if response.status_code == 200:
-        transaction_data = response.json()
-        return transaction_data["status"] == "Completed"
-    else:
-        return False
+    return response.status_code == 200 and response.json().get("status") == "Completed"
 
 def is_valid_mpesa_confirmation(mpesa_message: str) -> bool:
-    """Validate if the M-Pesa confirmation message is in a valid format."""
     return "Confirmed" in mpesa_message and "Ksh" in mpesa_message
 
 def main():
-    """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # Conversation handler to manage the state flow
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -207,10 +162,7 @@ def main():
         },
         fallbacks=[CommandHandler('start', start)],
     )
-
     application.add_handler(conv_handler)
-
-    # Start the bot
     application.run_polling()
 
 if __name__ == '__main__':
