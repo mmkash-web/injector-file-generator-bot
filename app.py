@@ -103,5 +103,19 @@ def check_payment_status(transaction_id: str):
         return data.get("status"), data.get("phone_number")
     return None, None
 
+@app.route('/payment_status', methods=['POST'])
+def payment_status():
+    """Endpoint to check payment status via Telegram bot."""
+    transaction_id = request.json.get('transaction_id')
+    
+    if not transaction_id:
+        return jsonify({"status": "error", "message": "Transaction ID is required."}), 400
+
+    status, phone_number = check_payment_status(transaction_id)
+    if status:
+        return jsonify({"status": "success", "transaction_id": transaction_id, "payment_status": status, "phone_number": phone_number}), 200
+    else:
+        return jsonify({"status": "error", "message": "Unable to retrieve payment status."}), 400
+
 if __name__ == '__main__':
     app.run(port=5000)
