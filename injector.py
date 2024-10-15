@@ -165,7 +165,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://thawing-fortress-57108-d7d1d80c4a40.herokuapp.com/billing/callback1"  # Your callback URL
+        "callback_url": "https://thawing-fortress-57108-d7d1d80c4a40.herokuapp.com/billing/callback"  # Your callback URL
     }
 
     auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
