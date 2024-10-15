@@ -19,7 +19,7 @@ API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
 def handle_mpesa_callback():
     """Handle the M-Pesa callback from PayHero API."""
     data = request.json
-    logger.info(f"Received callback: {data}")
+    logger.info(f"Received callback at /billing: {data}")
 
     # Check if the callback is valid
     if data and 'transaction_id' in data:
@@ -28,13 +28,35 @@ def handle_mpesa_callback():
 
         if payment_status == "successful":
             logger.info(f"Payment successful for transaction ID: {transaction_id}. Phone Number: {phone_number}")
-            # You can implement further actions here, like notifying the user
+            # Implement further actions here, like notifying the user
             return jsonify({"status": "success"}), 200
         else:
             logger.warning(f"Payment not successful for transaction ID: {transaction_id}")
             return jsonify({"status": "pending"}), 200
     else:
-        logger.error("Invalid callback data")
+        logger.error("Invalid callback data at /billing")
+        return jsonify({"status": "error", "message": "Invalid data"}), 400
+
+@app.route('/payhero/callback', methods=['POST'])
+def handle_payhero_callback():
+    """Handle the PayHero callback."""
+    data = request.json
+    logger.info(f"Received PayHero callback: {data}")
+
+    # Check if the callback is valid
+    if data and 'transaction_id' in data:
+        transaction_id = data['transaction_id']
+        payment_status, phone_number = check_payment_status(transaction_id)
+
+        if payment_status == "successful":
+            logger.info(f"Payment successful for transaction ID: {transaction_id}. Phone Number: {phone_number}")
+            # Implement further actions here, like notifying the user
+            return jsonify({"status": "success"}), 200
+        else:
+            logger.warning(f"Payment not successful for transaction ID: {transaction_id}")
+            return jsonify({"status": "pending"}), 200
+    else:
+        logger.error("Invalid PayHero callback data")
         return jsonify({"status": "error", "message": "Invalid data"}), 400
 
 def check_payment_status(transaction_id: str):
