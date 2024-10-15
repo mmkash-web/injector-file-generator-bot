@@ -54,5 +54,28 @@ def fetch_transaction_status():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/verify-mpesa-message', methods=['POST'])
+def verify_mpesa_message():
+    """Endpoint to verify M-Pesa messages uploaded by users."""
+    user_data = request.json
+    reference_id = user_data.get('reference_id')  # Expecting the reference ID in the uploaded message
+
+    if not reference_id:
+        return jsonify({"error": "Reference ID is required"}), 400
+
+    # Call the transaction status function
+    transaction_status = fetch_transaction_status(reference=reference_id)
+    
+    if isinstance(transaction_status, tuple):  # If it's an error response
+        return transaction_status  # Return the error response directly
+
+    # Process the transaction status and create a response for the user
+    if transaction_status['success'] and transaction_status['status'] == 'SUCCESS':
+        response_message = "Transaction successful!"
+    else:
+        response_message = "Transaction not successful or still pending."
+
+    return jsonify({"message": response_message, "transaction_status": transaction_status}), 200
+
 if __name__ == '__main__':
     app.run(debug=True)  # Set debug to True for development
