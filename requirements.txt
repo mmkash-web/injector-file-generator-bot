@@ -78,5 +78,8 @@ Werkzeug==3.0.4
 wikipedia==1.4.0
 wsproto==1.2.0
 yarl==1.13.1
-pymongo
+gunicorn
+
+
+
 
