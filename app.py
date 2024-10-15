@@ -5,11 +5,10 @@ import base64
 app = Flask(__name__)
 
 # Configuration
-PAYHERO_API_URL = 'https://backend.payhero.co.ke/api/v2/transaction-status'
-AUTH_TOKEN = 'NWlPc1ZpMUpCbTJmRFFKbDVMUEQ6dk54YjF6SGtQVjJ0WXJvNFNnUkRYaFR0V0JFQk9yOFI0NkVRaUJVdmtE'  # Replace with your actual token
-TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'  # Replace with your actual Telegram bot token
-CHAT_ID = 'YOUR_CHAT_ID'  # Replace with your actual chat ID
-
+PAYHERO_API_KEY = os.getenv('PAYHERO_API_KEY')
+API_PASSWORD = os.getenv('API_PASSWORD')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+CHAT_ID = os.getenv('CHAT_ID')  # Use CHAT_ID variable
 @app.route('/payhero/callback', methods=['POST'])
 def payhero_callback():
     # Receive callback data
