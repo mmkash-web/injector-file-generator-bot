@@ -181,38 +181,37 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         await update.message.reply_text(f"STK Push initiated successfully. Transaction ID: {transaction_id}")
         return transaction_id
     else:
-        await update.message.reply_text("Failed to initiate payment. Please try again.")
+        await update.message.reply_text("Error initiating STK Push. Please try again later.")
         return None
 
 async def check_payment_status(transaction_id: str):
-    """Check the payment status via PayHero API."""
-    url = f"https://backend.payhero.co.ke/api/v2/payments/status/{transaction_id}"
+    """Check payment status from PayHero API."""
+    url = f"{PAYHERO_API_URL}/{transaction_id}"
+
     auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
     headers = {
-        "Content-Type": "application/json",
         "Authorization": f"Basic {auth_token}"
     }
 
     response = requests.get(url, headers=headers)
+
     if response.status_code == 200:
-        data = response.json()
-        return data.get("status"), data.get("phone_number")
-    return None, None
+        payment_info = response.json()
+        return payment_info["status"], payment_info.get("phone_number")
+    else:
+        return "pending", None
 
-def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Check if the message is a valid M-Pesa confirmation."""
-    return "Confirmed." in message
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a message when the command /help is issued."""
-    await update.message.reply_text("This bot allows you to purchase HTTP injector files for 10 or 14 days.\n\nSimply follow the instructions and you'll receive your config link after confirming your payment.\n\nFor assistance, contact: @emmkash.")
+def is_valid_mpesa_confirmation(message: str):
+    """Validates the M-Pesa confirmation message format."""
+    return "DUKE EMMANUEL KIRERA-7." in message
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancels and ends the conversation."""
-    await update.message.reply_text("Operation canceled. Type /start to restart the process.")
+    """Cancel the conversation."""
+    await update.message.reply_text("Conversation cancelled.")
     return ConversationHandler.END
 
-if __name__ == '__main__':
+def main():
+    """Run the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -226,6 +225,7 @@ if __name__ == '__main__':
     )
 
     application.add_handler(conv_handler)
-    application.add_handler(CommandHandler("help", help_command))
     application.run_polling()
 
+if __name__ == '__main__':
+    main()
