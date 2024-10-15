@@ -1,45 +1,46 @@
 from flask import Flask, request, jsonify
 import requests
+import os
 
 app = Flask(__name__)
 
 # Replace these with your actual PayHero and Telegram bot credentials
-PAYHERO_API_KEY = 'iOsVi1JBm2fDQJl5LPD'
-API_PASSWORD='vNxb1zHkPV2tYro4SgRDXhTtWBEBOr8R46EQiBUvkD'
-TELEGRAM_BOT_TOKEN = '7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ'
-
-CHAT_ID = '1870796520'  # Your Telegram chat ID
+PAYHERO_API_KEY = os.getenv('PAYHERO_API_KEY')
+API_PASSWORD = os.getenv('API_PASSWORD')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+CHAT_ID = os.getenv('1870796520')
 
 @app.route('/payhero/callback', methods=['POST'])
 def payhero_callback():
     data = request.get_json()
     transaction_id = data.get('transaction_id')
+    reference = data.get('reference')  # Assuming the reference is part of the callback data
     status = data.get('status')
 
     # Log the callback data for debugging
     print(f"Received callback: {data}")
 
-    # Verify transaction with PayHero
-    verification_response = verify_transaction(transaction_id)
+    # Fetch the transaction status
+    transaction_status = fetch_transaction_status(reference)
     
-    if verification_response and verification_response.get('status') == 'successful':
+    if transaction_status and transaction_status.get('status') == 'SUCCESS':
         send_telegram_message(f"Transaction {transaction_id} was verified and is successful!")
     else:
         send_telegram_message(f"Transaction {transaction_id} verification failed or is unsuccessful.")
     
     return jsonify({'status': 'received'}), 200
 
-def verify_transaction(transaction_id):
-    url = f"https://api.payhero.com/transaction/{transaction_id}/verify"
+def fetch_transaction_status(reference):
+    url = f"https://backend.payhero.co.ke/api/v2/transaction-status?reference={reference}"
     headers = {
-        'Authorization': f'Bearer {PAYHERO_API_KEY}',
+        'Authorization': f'Basic {PAYHERO_API_KEY}',  # Use the correct auth method
         'Content-Type': 'application/json',
     }
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()  # Process the response
     else:
-        print(f"Error verifying transaction: {response.status_code} - {response.text}")
+        print(f"Error fetching transaction status: {response.status_code} - {response.text}")
         return None  # Handle error
 
 def send_telegram_message(message):
