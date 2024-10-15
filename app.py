@@ -21,17 +21,17 @@ def handle_mpesa_callback():
     data = request.json
     logger.info(f"Received callback at /billing: {data}")
 
-    # Check if the callback is valid
-    if data and 'transaction_id' in data:
-        transaction_id = data['transaction_id']
-        payment_status, phone_number = check_payment_status(transaction_id)
+    # Check if the callback contains 'response' and 'ResultCode'
+    if data and 'response' in data and 'ResultCode' in data['response']:
+        result_code = data['response']['ResultCode']
+        phone_number = data['response'].get('Phone', '')
 
-        if payment_status == "successful":
-            logger.info(f"Payment successful for transaction ID: {transaction_id}. Phone Number: {phone_number}")
+        if result_code == 0:  # Assuming '0' indicates success
+            logger.info(f"Payment successful. Phone Number: {phone_number}")
             # Implement further actions here, like notifying the user
             return jsonify({"status": "success"}), 200
         else:
-            logger.warning(f"Payment not successful for transaction ID: {transaction_id}")
+            logger.warning(f"Payment not successful. Result Code: {result_code}")
             return jsonify({"status": "pending"}), 200
     else:
         logger.error("Invalid callback data at /billing")
@@ -43,18 +43,14 @@ def handle_payhero_callback():
     data = request.json
     logger.info(f"Received PayHero callback: {data}")
 
-    # Check if the callback is valid
-    if data and 'transaction_id' in data:
-        transaction_id = data['transaction_id']
-        payment_status, phone_number = check_payment_status(transaction_id)
+    # Check if the callback contains 'response' and 'Transaction_Reference'
+    if data and 'response' in data and 'Transaction_Reference' in data['response']:
+        transaction_reference = data['response']['Transaction_Reference']
+        phone_number = data['response'].get('Source', '')
 
-        if payment_status == "successful":
-            logger.info(f"Payment successful for transaction ID: {transaction_id}. Phone Number: {phone_number}")
-            # Implement further actions here, like notifying the user
-            return jsonify({"status": "success"}), 200
-        else:
-            logger.warning(f"Payment not successful for transaction ID: {transaction_id}")
-            return jsonify({"status": "pending"}), 200
+        # Here you can implement your payment verification logic
+        logger.info(f"Payment successful for Transaction Reference: {transaction_reference}. Phone Number: {phone_number}")
+        return jsonify({"status": "success"}), 200
     else:
         logger.error("Invalid PayHero callback data")
         return jsonify({"status": "error", "message": "Invalid data"}), 400
