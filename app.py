@@ -1,49 +1,47 @@
 from flask import Flask, request, jsonify
 import httpx
 import os
+import base64
 
 app = Flask(__name__)
 
-# Payhero API credentials
-AUTH_TOKEN = os.environ.get('PAYHERO_AUTH_TOKEN')  # Store your auth token in environment variable
+# Fetching credentials from environment variables
+API_USERNAME = os.getenv('PAYHERO_API_USERNAME')  # Your API username
+API_PASSWORD = os.getenv('PAYHERO_API_PASSWORD')  # Your API password
 
-# Endpoint to initiate payment (dummy example)
+def get_auth_header():
+    # Create Basic Auth header
+    credentials = f"{API_USERNAME}:{API_PASSWORD}"
+    token = base64.b64encode(credentials.encode()).decode()
+    return {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
+
 @app.route('/pay', methods=['POST'])
-def initiate_payment():
-    # This would include the details you need to send to Payhero to initiate a payment
-    payment_data = {
-        "amount": request.json.get("amount"),
-        "phone": request.json.get("phone"),
-        "user_reference": request.json.get("user_reference"),
-        # Add more fields as required by Payhero
-    }
+def pay():
+    # Implement your payment initiation logic here
+    # This is a placeholder for demonstration. Replace with actual API call.
     
-    # Dummy response simulating a successful payment initiation
-    reference_id = "UNIQUE_REF_12345"  # In a real scenario, you'd get this from the Payhero response
+    # Simulating the response for the payment initiation
+    reference_id = "some_reference_id"  # Replace with actual reference ID from payment API response
+    return jsonify({"reference_id": reference_id})
 
-    # Store the reference_id somewhere (database or in-memory)
-    # For demonstration, we return it as response
-    return jsonify({"status": "success", "reference_id": reference_id}), 200
-
-# Endpoint to fetch transaction status
 @app.route('/transaction-status', methods=['GET'])
 def fetch_transaction_status():
-    reference_id = request.args.get('reference')
-    if not reference_id:
+    reference = request.args.get('reference')
+    
+    if not reference:
         return jsonify({"error": "Reference ID is required"}), 400
-
-    url = f'https://backend.payhero.co.ke/api/v2/transaction-status?reference={reference_id}'
-    headers = {
-        'Authorization': f'Basic {AUTH_TOKEN}',
-        'Content-Type': 'application/json'
-    }
-
-    response = httpx.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json(), 200
-    else:
-        return jsonify({"error": "Failed to fetch transaction status", "details": response.json()}), response.status_code
+    
+    url = f'https://backend.payhero.co.ke/api/v2/transaction-status?reference={reference}'
+    headers = get_auth_header()
+    
+    try:
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()  # Raise an error for bad responses
+        return response.json()  # Return the JSON response directly
+    except httpx.HTTPStatusError as e:
+        return jsonify({"error": f"HTTP error occurred: {e.response.status_code} - {e.response.text}"}), e.response.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
-
+    app.run(debug=True)  # Set debug to True for development
