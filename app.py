@@ -18,11 +18,22 @@ def get_auth_header():
 @app.route('/pay', methods=['POST'])
 def pay():
     # Implement your payment initiation logic here
-    # This is a placeholder for demonstration. Replace with actual API call.
-    
-    # Simulating the response for the payment initiation
     reference_id = "some_reference_id"  # Replace with actual reference ID from payment API response
     return jsonify({"reference_id": reference_id})
+
+@app.route('/payhero/callback', methods=['POST'])
+def payhero_callback():
+    # Handle the Payhero callback logic
+    data = request.json
+    # Process the callback data here
+    return jsonify({"message": "Payhero callback received", "data": data}), 200
+
+@app.route('/billing/callback', methods=['POST'])
+def billing_callback():
+    # Handle the billing callback logic
+    data = request.json
+    # Process the callback data here
+    return jsonify({"message": "Billing callback received", "data": data}), 200
 
 @app.route('/transaction-status', methods=['GET'])
 def fetch_transaction_status():
