@@ -14,10 +14,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
+BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Replace with your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
-API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
-API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
+API_USERNAME = "iOsVi1JBm2fDQJl5LPD"  # Replace with your PayHero API username
+API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEBOr8R46EQiBUvkD"  # Replace with your PayHero API password
 
 # Load file links from JSON
 def load_links():
@@ -165,7 +165,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://thawing-fortress-57108-d7d1d80c4a40.herokuapp.com/billing/callback"  # Your callback URL
+        "callback_url": "https://thawing-fortress-57108-d7d1d80c4a40.herokuapp.com/billing/callback"  # Replace with your callback URL
     }
 
     auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
@@ -189,29 +189,35 @@ async def check_payment_status(transaction_id: str):
     url = f"{PAYHERO_API_URL}/{transaction_id}"
 
     auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {auth_token}"
-    }
+    headers = {"Authorization": f"Basic {auth_token}"}
 
-    response = requests.get(url, headers=headers)
+    for _ in range(3):  # Retry up to 3 times if status is pending
+        response = requests.get(url, headers=headers)
 
-    if response.status_code == 200:
-        payment_info = response.json()
-        return payment_info["status"], payment_info.get("phone_number")
-    else:
-        return "pending", None
+        if response.status_code == 200:
+            payment_info = response.json()
+            status = payment_info["status"]
+            if status == "successful":
+                return status, payment_info.get("phone_number")
+            elif status == "failed":
+                return "failed", None
+        time.sleep(3)  # Wait before retrying
+
+    return "pending", None
+
+def extract_mpesa_transaction_code(message: str):
+    """Extracts M-Pesa transaction code from the confirmation message."""
+    import re
+    match = re.search(r'([A-Z0-9]{10})', message)
+    return match.group(0) if match else None
 
 def is_valid_mpesa_confirmation(message: str):
     """Validates the M-Pesa confirmation message format."""
-    return "DUKE EMMANUEL KIRERA-7." in message
+    # You can further customize this based on the structure of M-Pesa messages.
+    return extract_mpesa_transaction_code(message) is not None
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation."""
-    await update.message.reply_text("Conversation cancelled.")
-    return ConversationHandler.END
-
-def main():
-    """Run the bot."""
+# Initialize the bot
+if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -221,11 +227,10 @@ def main():
             ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
             ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("start", start)],
     )
 
     application.add_handler(conv_handler)
-    application.run_polling()
 
-if __name__ == '__main__':
-    main()
+    # Start the bot
+    application.run_polling()
