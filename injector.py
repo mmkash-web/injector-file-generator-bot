@@ -14,10 +14,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Replace with your bot token
+BOT_TOKEN = "7480076460:AAGieUKKaivtNGoMDSVKeMBuMOICJ9IKJgQ"  # Your bot token
 PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
-API_USERNAME = "iOsVi1JBm2fDQJl5LPD"  # Replace with your PayHero API username
-API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEBOr8R46EQiBUvkD"  # Replace with your PayHero API password
+API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
+API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
 
 # Load file links from JSON
 def load_links():
@@ -46,7 +46,7 @@ used_confirmation_messages = set()
 CHOOSING_TYPE, ENTERING_PHONE, ENTERING_MPESA_CONFIRMATION = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Starts the bot and sends the welcome message."""
+    """Starts the bot and sends the welcome message"""
     keyboard = [
         [InlineKeyboardButton("HTTP Injector 10 Days - 80KES", callback_data="HTTP_10_DAYS")],
         [InlineKeyboardButton("HTTP Injector 14 Days - 100KES", callback_data="HTTP_14_DAYS")],
@@ -56,7 +56,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CHOOSING_TYPE
 
 async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the file type choice and asks for the phone number."""
+    """Handles the file type choice and asks for the phone number"""
     query = update.callback_query
     await query.answer()
 
@@ -66,7 +66,7 @@ async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     return ENTERING_PHONE
 
 async def enter_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles phone number input and proceeds with the payment."""
+    """Handles phone number input and proceeds with the payment"""
     phone_number = update.message.text
     context.user_data["phone_number"] = phone_number
 
@@ -165,7 +165,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://thawing-fortress-57108-d7d1d80c4a40.herokuapp.com/billing/callback"  # Replace with your callback URL
+        "callback_url": "https://thawing-fortress-57108-d7d1d80c4a40.herokuapp.com/billing/callback"  # Your callback URL
     }
 
     auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
@@ -177,35 +177,44 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
     response = requests.post(PAYHERO_API_URL, json=payload, headers=headers)
 
     if response.status_code == 200:
-        logger.info(f"STK Push initiated: {response.json()}")
-        return response.json().get("transaction_id")  # Extract the transaction ID from the response
+        transaction_id = response.json().get("transaction_id")
+        await update.message.reply_text(f"STK Push initiated successfully. Transaction ID: {transaction_id}")
+        return transaction_id
     else:
-        logger.error(f"Failed to initiate STK Push: {response.content.decode()}")
-        await update.message.reply_text("Failed to initiate payment. Please try again later.")
+        await update.message.reply_text("Failed to initiate payment. Please try again.")
         return None
 
 async def check_payment_status(transaction_id: str):
-    """Check the payment status using the transaction ID."""
-    # Implement this function based on your API documentation
-    # Simulating a payment check for demonstration purposes
-    time.sleep(5)  # Simulate waiting for payment confirmation
-    return "successful", "0700000000"  # Simulated successful payment with a phone number
+    """Check the payment status via PayHero API."""
+    url = f"https://backend.payhero.co.ke/api/v2/payments/status/{transaction_id}"
+    auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Basic {auth_token}"
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("status"), data.get("phone_number")
+    return None, None
 
 def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Validate the M-Pesa confirmation message format."""
-    # Implement your own validation logic
-    return "received" in message.lower()
+    """Check if the message is a valid M-Pesa confirmation."""
+    return "Confirmed." in message
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a message when the command /help is issued."""
+    await update.message.reply_text("This bot allows you to purchase HTTP injector files for 10 or 14 days.\n\nSimply follow the instructions and you'll receive your config link after confirming your payment.\n\nFor assistance, contact: @emmkash.")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation."""
-    await update.message.reply_text("Operation canceled. Thank you for using the bot!")
+    """Cancels and ends the conversation."""
+    await update.message.reply_text("Operation canceled. Type /start to restart the process.")
     return ConversationHandler.END
 
-def main():
-    """Run the bot."""
+if __name__ == '__main__':
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Define the conversation handler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -217,8 +226,5 @@ def main():
     )
 
     application.add_handler(conv_handler)
+    application.add_handler(CommandHandler("help", help_command))
     application.run_polling()
-
-if __name__ == "__main__":
-    main()
-
